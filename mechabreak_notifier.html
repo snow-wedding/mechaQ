@@ -1,0 +1,1261 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MECHA BREAK — Match Notifier</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@300;400;600;700;800&family=Share+Tech+Mono&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --orange: #ff6b20;
+    --orange-dim: rgba(255, 107, 32, 0.15);
+    --orange-glow: rgba(255, 107, 32, 0.4);
+    --cyan: #00d4ff;
+    --cyan-dim: rgba(0, 212, 255, 0.1);
+    --bg: #060810;
+    --bg2: #0d1120;
+    --bg3: #121828;
+    --border: #1e2840;
+    --border-bright: #2a3860;
+    --text: #c8d8f0;
+    --text-dim: #4a6080;
+    --text-muted: #2a3850;
+    --green: #00ff88;
+    --green-dim: rgba(0, 255, 136, 0.1);
+    --red: #ff4060;
+    --red-dim: rgba(255, 64, 96, 0.1);
+    --yellow: #ffcc00;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Share Tech Mono', monospace;
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* Scanline overlay */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background: repeating-linear-gradient(
+      0deg,
+      transparent,
+      transparent 2px,
+      rgba(0,0,0,0.03) 2px,
+      rgba(0,0,0,0.03) 4px
+    );
+    pointer-events: none;
+    z-index: 1000;
+  }
+
+  /* Grid background */
+  body::after {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image:
+      linear-gradient(rgba(30, 40, 64, 0.3) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(30, 40, 64, 0.3) 1px, transparent 1px);
+    background-size: 40px 40px;
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  .wrapper {
+    position: relative;
+    z-index: 1;
+    max-width: 860px;
+    margin: 0 auto;
+    padding: 24px 20px 60px;
+  }
+
+  /* ── HEADER ── */
+  header {
+    display: flex;
+    align-items: flex-end;
+    gap: 16px;
+    margin-bottom: 32px;
+    padding-bottom: 20px;
+    border-bottom: 1px solid var(--border);
+    position: relative;
+  }
+
+  header::after {
+    content: '';
+    position: absolute;
+    bottom: -1px;
+    left: 0;
+    width: 120px;
+    height: 1px;
+    background: var(--orange);
+    box-shadow: 0 0 8px var(--orange-glow);
+  }
+
+  .logo-mark {
+    width: 44px;
+    height: 44px;
+    border: 2px solid var(--orange);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+    clip-path: polygon(8px 0%, 100% 0%, 100% calc(100% - 8px), calc(100% - 8px) 100%, 0% 100%, 0% 8px);
+    background: var(--orange-dim);
+    flex-shrink: 0;
+  }
+
+  .logo-mark svg {
+    width: 24px;
+    height: 24px;
+    fill: var(--orange);
+    filter: drop-shadow(0 0 4px var(--orange-glow));
+  }
+
+  .header-text {}
+  .header-title {
+    font-family: 'Barlow Condensed', sans-serif;
+    font-size: 28px;
+    font-weight: 800;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    line-height: 1;
+    color: #fff;
+  }
+
+  .header-title span { color: var(--orange); }
+
+  .header-sub {
+    font-size: 10px;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: var(--text-dim);
+    margin-top: 3px;
+  }
+
+  .header-badge {
+    margin-left: auto;
+    font-size: 9px;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    color: var(--text-dim);
+    border: 1px solid var(--border);
+    padding: 4px 10px;
+    clip-path: polygon(6px 0%, 100% 0%, calc(100% - 6px) 100%, 0% 100%);
+  }
+
+  /* ── STATUS DISPLAY ── */
+  .status-display {
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    clip-path: polygon(0 0, calc(100% - 16px) 0, 100% 16px, 100% 100%, 16px 100%, 0 calc(100% - 16px));
+    padding: 28px 32px;
+    margin-bottom: 20px;
+    position: relative;
+    overflow: hidden;
+    transition: border-color 0.3s;
+  }
+
+  .status-display.active {
+    border-color: var(--green);
+    box-shadow: 0 0 20px rgba(0, 255, 136, 0.08), inset 0 0 40px rgba(0, 255, 136, 0.03);
+  }
+
+  .status-display.match-found {
+    border-color: var(--orange);
+    box-shadow: 0 0 30px var(--orange-glow), inset 0 0 60px var(--orange-dim);
+    animation: matchPulse 1s ease-in-out 3;
+  }
+
+  .status-display.error {
+    border-color: var(--red);
+  }
+
+  @keyframes matchPulse {
+    0%, 100% { box-shadow: 0 0 30px var(--orange-glow), inset 0 0 60px var(--orange-dim); }
+    50% { box-shadow: 0 0 60px rgba(255,107,32,0.8), inset 0 0 80px rgba(255,107,32,0.15); }
+  }
+
+  .status-display::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, var(--orange), transparent);
+    opacity: 0;
+    transition: opacity 0.3s;
+  }
+
+  .status-display.active::before,
+  .status-display.match-found::before { opacity: 1; }
+
+  .status-row {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+  }
+
+  .status-indicator {
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    background: var(--text-muted);
+    flex-shrink: 0;
+    position: relative;
+    transition: background 0.3s;
+  }
+
+  .status-indicator.idle { background: var(--text-muted); }
+  .status-indicator.watching {
+    background: var(--green);
+    box-shadow: 0 0 8px var(--green);
+    animation: blink 2s ease-in-out infinite;
+  }
+  .status-indicator.alert {
+    background: var(--orange);
+    box-shadow: 0 0 12px var(--orange-glow);
+    animation: blink 0.4s ease-in-out infinite;
+  }
+  .status-indicator.error-dot { background: var(--red); }
+
+  @keyframes blink {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.3; }
+  }
+
+  .status-label {
+    font-family: 'Barlow Condensed', sans-serif;
+    font-size: 22px;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--text-dim);
+    transition: color 0.3s;
+  }
+
+  .status-display.active .status-label { color: var(--green); }
+  .status-display.match-found .status-label { color: var(--orange); }
+  .status-display.error .status-label { color: var(--red); }
+
+  .status-detail {
+    margin-top: 12px;
+    font-size: 11px;
+    color: var(--text-dim);
+    letter-spacing: 0.05em;
+    line-height: 1.6;
+    min-height: 18px;
+  }
+
+  .status-detail .file-path {
+    color: var(--cyan);
+    word-break: break-all;
+  }
+
+  .status-meta {
+    display: flex;
+    gap: 24px;
+    margin-top: 16px;
+    padding-top: 16px;
+    border-top: 1px solid var(--border);
+  }
+
+  .meta-item {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  .meta-key {
+    font-size: 9px;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+  }
+
+  .meta-val {
+    font-size: 13px;
+    color: var(--text);
+    transition: color 0.3s;
+  }
+
+  .meta-val.good { color: var(--green); }
+  .meta-val.warn { color: var(--yellow); }
+  .meta-val.bad { color: var(--red); }
+
+  /* ── PANELS ── */
+  .panel-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+    margin-bottom: 20px;
+  }
+
+  @media (max-width: 600px) {
+    .panel-grid { grid-template-columns: 1fr; }
+  }
+
+  .panel {
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    padding: 20px;
+    position: relative;
+  }
+
+  .panel-header {
+    font-size: 9px;
+    letter-spacing: 0.25em;
+    text-transform: uppercase;
+    color: var(--text-dim);
+    margin-bottom: 16px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .panel-header::before {
+    content: '';
+    display: block;
+    width: 3px;
+    height: 10px;
+    background: var(--orange);
+  }
+
+  /* Buttons */
+  .btn {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 12px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    border: none;
+    cursor: pointer;
+    padding: 10px 20px;
+    position: relative;
+    transition: all 0.15s;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    clip-path: polygon(6px 0%, 100% 0%, calc(100% - 6px) 100%, 0% 100%);
+  }
+
+  .btn-primary {
+    background: var(--orange);
+    color: #000;
+    font-weight: bold;
+  }
+
+  .btn-primary:hover {
+    background: #ff8040;
+    box-shadow: 0 0 16px var(--orange-glow);
+    transform: translateY(-1px);
+  }
+
+  .btn-primary:active { transform: translateY(0); }
+
+  .btn-secondary {
+    background: transparent;
+    color: var(--text-dim);
+    border: 1px solid var(--border-bright);
+  }
+
+  .btn-secondary:hover {
+    color: var(--text);
+    border-color: var(--text-dim);
+  }
+
+  .btn-danger {
+    background: transparent;
+    color: var(--red);
+    border: 1px solid rgba(255,64,96,0.3);
+  }
+
+  .btn-danger:hover {
+    background: var(--red-dim);
+    border-color: var(--red);
+  }
+
+  .btn:disabled {
+    opacity: 0.35;
+    cursor: not-allowed;
+    transform: none !important;
+    box-shadow: none !important;
+  }
+
+  .btn-row {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+  }
+
+  /* Inputs */
+  .input-group {
+    margin-bottom: 14px;
+  }
+
+  .input-label {
+    font-size: 9px;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: var(--text-dim);
+    display: block;
+    margin-bottom: 6px;
+  }
+
+  input[type="text"], input[type="password"] {
+    width: 100%;
+    background: var(--bg);
+    border: 1px solid var(--border-bright);
+    color: var(--text);
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 11px;
+    padding: 9px 12px;
+    outline: none;
+    transition: border-color 0.2s;
+    letter-spacing: 0.03em;
+  }
+
+  input[type="text"]:focus, input[type="password"]:focus {
+    border-color: var(--orange);
+    box-shadow: 0 0 0 2px var(--orange-dim);
+  }
+
+  input[type="text"]::placeholder { color: var(--text-muted); }
+
+  .input-hint {
+    font-size: 10px;
+    color: var(--text-muted);
+    margin-top: 5px;
+    line-height: 1.4;
+  }
+
+  /* Webhook status */
+  .webhook-test-result {
+    font-size: 10px;
+    padding: 6px 10px;
+    margin-top: 8px;
+    border-left: 2px solid var(--border);
+    display: none;
+  }
+
+  .webhook-test-result.ok { border-color: var(--green); color: var(--green); display: block; }
+  .webhook-test-result.fail { border-color: var(--red); color: var(--red); display: block; }
+
+  /* ── ACTIVITY LOG ── */
+  .log-panel {
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    padding: 20px;
+    margin-bottom: 20px;
+  }
+
+  #activity-log {
+    height: 160px;
+    overflow-y: auto;
+    font-size: 11px;
+    line-height: 1.7;
+    color: var(--text-dim);
+    scrollbar-width: thin;
+    scrollbar-color: var(--border-bright) transparent;
+  }
+
+  #activity-log::-webkit-scrollbar { width: 4px; }
+  #activity-log::-webkit-scrollbar-track { background: transparent; }
+  #activity-log::-webkit-scrollbar-thumb { background: var(--border-bright); }
+
+  .log-entry { display: flex; gap: 10px; }
+  .log-time { color: var(--text-muted); flex-shrink: 0; }
+  .log-msg { }
+  .log-msg.success { color: var(--green); }
+  .log-msg.alert { color: var(--orange); }
+  .log-msg.error { color: var(--red); }
+  .log-msg.info { color: var(--cyan); }
+
+  /* ── MATCH ALERT OVERLAY ── */
+  #match-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    z-index: 999;
+    background: rgba(6, 8, 16, 0.85);
+    backdrop-filter: blur(4px);
+    align-items: center;
+    justify-content: center;
+  }
+
+  #match-overlay.visible { display: flex; }
+
+  .match-alert-box {
+    background: var(--bg2);
+    border: 2px solid var(--orange);
+    box-shadow: 0 0 60px var(--orange-glow), 0 0 120px rgba(255,107,32,0.2);
+    padding: 40px 48px;
+    text-align: center;
+    clip-path: polygon(16px 0%, 100% 0%, 100% calc(100% - 16px), calc(100% - 16px) 100%, 0% 100%, 0% 16px);
+    max-width: 480px;
+    width: 90%;
+    animation: alertSlideIn 0.3s ease-out;
+  }
+
+  @keyframes alertSlideIn {
+    from { transform: scale(0.85) translateY(20px); opacity: 0; }
+    to { transform: scale(1) translateY(0); opacity: 1; }
+  }
+
+  .match-alert-icon {
+    font-size: 48px;
+    margin-bottom: 16px;
+    animation: iconPop 0.5s ease-out 0.2s both;
+  }
+
+  @keyframes iconPop {
+    from { transform: scale(0); opacity: 0; }
+    to { transform: scale(1); opacity: 1; }
+  }
+
+  .match-alert-title {
+    font-family: 'Barlow Condensed', sans-serif;
+    font-size: 36px;
+    font-weight: 800;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--orange);
+    text-shadow: 0 0 20px var(--orange-glow);
+    margin-bottom: 8px;
+  }
+
+  .match-alert-sub {
+    font-size: 12px;
+    color: var(--text-dim);
+    letter-spacing: 0.1em;
+    margin-bottom: 28px;
+  }
+
+  .match-alert-time {
+    font-size: 24px;
+    color: var(--yellow);
+    margin-bottom: 24px;
+    font-family: 'Barlow Condensed', sans-serif;
+    font-weight: 700;
+  }
+
+  /* ── FOOTER ── */
+  footer {
+    border-top: 1px solid var(--border);
+    padding-top: 16px;
+    font-size: 10px;
+    color: var(--text-muted);
+    display: flex;
+    justify-content: space-between;
+    gap: 10px;
+    flex-wrap: wrap;
+  }
+
+  .footer-note { letter-spacing: 0.05em; }
+  .footer-compat { color: var(--text-muted); }
+  .footer-compat span { color: var(--green); }
+
+  /* Notification count badge */
+  .notif-badge {
+    display: inline-block;
+    background: var(--orange);
+    color: #000;
+    font-size: 9px;
+    font-weight: bold;
+    padding: 1px 6px;
+    clip-path: polygon(4px 0%, 100% 0%, calc(100% - 4px) 100%, 0% 100%);
+    vertical-align: middle;
+  }
+</style>
+</head>
+<body>
+
+<div class="wrapper">
+
+  <!-- HEADER -->
+  <header>
+    <div class="logo-mark">
+      <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+        <path d="M12 2L2 7v10l10 5 10-5V7L12 2zm0 2.18L20 8.5v7L12 19.82 4 15.5v-7L12 4.18z"/>
+        <circle cx="12" cy="12" r="3"/>
+      </svg>
+    </div>
+    <div class="header-text">
+      <div class="header-title">Mecha Break <span>Notifier</span></div>
+      <div class="header-sub">Queue pop detection · Discord alert system</div>
+    </div>
+  
+  </header>
+
+  <!-- STATUS DISPLAY -->
+  <div class="status-display" id="status-display">
+    <div class="status-row">
+      <div class="status-indicator idle" id="status-dot"></div>
+      <div class="status-label" id="status-label">STANDING BY</div>
+    </div>
+    <div class="status-detail" id="status-detail">
+      Select your game log file and configure a Discord webhook to begin monitoring.
+    </div>
+    <div class="status-meta">
+      <div class="meta-item">
+        <span class="meta-key">Log File</span>
+        <span class="meta-val bad" id="meta-log">Not selected</span>
+      </div>
+      <div class="meta-item">
+        <span class="meta-key">Notifier</span>
+        <span class="meta-val bad" id="meta-webhook">Not configured</span>
+      </div>
+      <div class="meta-item">
+        <span class="meta-key">Matches Found</span>
+        <span class="meta-val" id="meta-matches">0</span>
+      </div>
+      <div class="meta-item">
+        <span class="meta-key">Poll Rate</span>
+        <span class="meta-val">250ms</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- CONFIG + CONTROLS -->
+  <div class="panel-grid">
+
+    <!-- Log File Panel -->
+    <div class="panel">
+      <div class="panel-header">Logs Folder</div>
+      <div class="input-group">
+        <label class="input-label">Folder Path</label>
+        <input type="text" id="log-path-display" placeholder="No folder selected" readonly
+               style="cursor: default; color: var(--cyan);">
+        <div class="input-hint" id="log-file-hint">The latest log is auto-detected. Example path:<br><code style="color:var(--yellow);background:var(--bg);border:1px solid var(--border);padding:2px 6px;font-size:10px;display:inline-block;margin-top:4px;word-break:break-all">C:\SteamLibrary\steamapps\common\MechaBREAK\Game\MechaBreak\logs\MechaBREAK</code></div>
+      </div>
+      <div id="resume-banner" style="display:none; font-size:10px; color:var(--yellow); margin-bottom:10px; padding:6px 10px; border-left:2px solid var(--yellow);">
+        ↺ Previous folder remembered — click Resume to continue.
+      </div>
+      <div class="btn-row">
+        <button class="btn btn-primary" onclick="selectLogsFolder()" id="btn-select">
+          ▶ Select Folder
+        </button>
+        <button class="btn btn-secondary" onclick="resumeFolder()" id="btn-resume" style="display:none">
+          ↺ Resume
+        </button>
+        <button class="btn btn-danger" onclick="stopWatching()" id="btn-stop" disabled>
+          ■ Stop
+        </button>
+      </div>
+    </div>
+
+    <!-- Notifier Config Panel -->
+    <div class="panel" id="notifier-panel">
+      <div class="panel-header">Discord Notifier</div>
+
+      <!-- Setup form (shown until setup complete) -->
+      <div id="setup-form">
+        <div class="input-group">
+          <label class="input-label">Your Discord User ID</label>
+          <input type="text" id="discord-user-id" placeholder="e.g. 123456789012345678"
+                 oninput="saveUserId()" maxlength="20" style="letter-spacing:0.08em">
+          <div class="input-hint">Settings → Advanced → Developer Mode, then right-click your username → Copy User ID.</div>
+        </div>
+        <div class="btn-row">
+          <button class="btn btn-primary" onclick="runSetup()" id="btn-setup">▶ Create My Channel</button>
+        </div>
+        <div id="setup-status" style="display:none; font-size:10px; margin-top:10px; padding:7px 10px; border-left:2px solid var(--border);"></div>
+      </div>
+
+      <!-- Ready state (shown after setup completes) -->
+      <div id="setup-complete" style="display:none;">
+        <div style="font-size:10px; color:var(--green); padding:8px 10px; border-left:2px solid var(--green); margin-bottom:14px; line-height:1.7;">
+          ✓ Channel ready: <span id="channel-name-display" style="color:var(--cyan)"></span><br>
+          <span style="color:var(--text-dim)">Notifications will be posted to your private channel.</span>
+        </div>
+        <div class="btn-row">
+          <button class="btn btn-secondary" onclick="testNotification()" id="btn-test">Test Ping</button>
+          <button class="btn btn-secondary" onclick="resetSetup()">↺ Re-run Setup</button>
+        </div>
+        <div id="webhook-test-result" class="webhook-test-result"></div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- ACTIVITY LOG -->
+  <div class="log-panel">
+    <div class="panel-header">Activity Log</div>
+    <div id="activity-log">
+      <div class="log-entry">
+        <span class="log-time">[--:--:--]</span>
+        <span class="log-msg">System ready. Awaiting configuration.</span>
+      </div>
+    </div>
+  </div>
+
+  <footer>
+    <span class="footer-note">MECHA BREAK MATCH NOTIFIER · by Soletta</span>
+    <span class="footer-compat">Requires <span>Chrome</span> or <span>Edge</span> (File System Access API)</span>
+  </footer>
+
+</div>
+
+<!-- MATCH FOUND OVERLAY -->
+<div id="match-overlay">
+  <div class="match-alert-box">
+    <div class="match-alert-icon">⚡</div>
+    <div class="match-alert-title">Match Found!</div>
+    <div class="match-alert-sub">YOUR QUEUE HAS POPPED — GET BACK TO YOUR DESK</div>
+    <div class="match-alert-time" id="overlay-time"></div>
+    <button class="btn btn-primary" onclick="dismissOverlay()" style="width:100%; justify-content:center;">
+      ✓ Acknowledged
+    </button>
+  </div>
+</div>
+
+<script>
+// ─── STATE ───────────────────────────────────────────────────────────────────
+let folderHandle   = null;   // root logs folder (persisted in IDB)
+let currentLogHandle = null; // currently tracked FileSystemFileHandle
+let currentLogName   = '';
+let lastOffset     = 0;
+let pollTimer      = null;
+let refreshTimer   = null;
+let matchCount     = 0;
+let isWatching     = false;
+
+const POLL_INTERVAL    = 250;   // ms — log line check
+const REFRESH_INTERVAL = 5000;  // ms — check for newer date-dir / log file
+const DATE_DIR_RE      = /^\d{4}_\d{2}_\d{2}$/;
+
+// ─── INDEXEDDB PERSISTENCE ────────────────────────────────────────────────────
+function openIDB() {
+  return new Promise((res, rej) => {
+    const req = indexedDB.open('mb-notifier', 1);
+    req.onupgradeneeded = e => e.target.result.createObjectStore('handles');
+    req.onsuccess = e => res(e.target.result);
+    req.onerror   = e => rej(e.target.error);
+  });
+}
+
+async function saveFolder(handle) {
+  const db = await openIDB();
+  return new Promise((res, rej) => {
+    const tx = db.transaction('handles', 'readwrite');
+    tx.objectStore('handles').put(handle, 'logsFolder');
+    tx.oncomplete = res;
+    tx.onerror = e => rej(e.target.error);
+  });
+}
+
+async function loadFolder() {
+  const db = await openIDB();
+  return new Promise((res, rej) => {
+    const tx = db.transaction('handles', 'readonly');
+    const req = tx.objectStore('handles').get('logsFolder');
+    req.onsuccess = e => res(e.target.result || null);
+    req.onerror   = e => rej(e.target.error);
+  });
+}
+
+async function clearFolder() {
+  const db = await openIDB();
+  return new Promise((res, rej) => {
+    const tx = db.transaction('handles', 'readwrite');
+    tx.objectStore('handles').delete('logsFolder');
+    tx.oncomplete = res;
+    tx.onerror = e => rej(e.target.error);
+  });
+}
+
+// ─── LOG UTIL ─────────────────────────────────────────────────────────────────
+function logActivity(msg, type = '') {
+  const container = document.getElementById('activity-log');
+  const now = new Date();
+  const ts = `[${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}:${String(now.getSeconds()).padStart(2,'0')}]`;
+  const entry = document.createElement('div');
+  entry.className = 'log-entry';
+  entry.innerHTML = `<span class="log-time">${ts}</span><span class="log-msg ${type}">${msg}</span>`;
+  container.appendChild(entry);
+  container.scrollTop = container.scrollHeight;
+  while (container.children.length > 120) container.removeChild(container.firstChild);
+}
+
+// ─── STATUS HELPERS ───────────────────────────────────────────────────────────
+function setStatus(state, label, detail) {
+  const display = document.getElementById('status-display');
+  const dot  = document.getElementById('status-dot');
+  const lbl  = document.getElementById('status-label');
+  const det  = document.getElementById('status-detail');
+  display.className = 'status-display ' + (state || '');
+  dot.className = 'status-indicator ' + (
+    state === 'active'       ? 'watching'  :
+    state === 'match-found'  ? 'alert'     :
+    state === 'error'        ? 'error-dot' : 'idle'
+  );
+  lbl.textContent = label;
+  if (detail !== undefined) det.innerHTML = detail;
+}
+
+function updateMeta() {
+  const el = document.getElementById('meta-matches');
+  el.textContent = matchCount;
+  if (matchCount > 0) el.className = 'meta-val alert';
+}
+
+function updateMetaLog(text, cls = 'good') {
+  const el = document.getElementById('meta-log');
+  el.textContent = text;
+  el.className = 'meta-val ' + cls;
+}
+
+function formatBytes(b) {
+  if (b < 1024)    return b + ' B';
+  if (b < 1048576) return (b/1024).toFixed(1) + ' KB';
+  return (b/1048576).toFixed(1) + ' MB';
+}
+
+// ─── AUTO LOG DETECTION (mirrors Python logic) ────────────────────────────────
+// Find lexicographically latest YYYY_MM_DD sub-directory
+async function findLatestDateDir(rootHandle) {
+  const dirs = [];
+  for await (const [name, handle] of rootHandle.entries()) {
+    if (handle.kind === 'directory' && DATE_DIR_RE.test(name)) {
+      dirs.push({ name, handle });
+    }
+  }
+  if (!dirs.length) return null;
+  dirs.sort((a, b) => b.name.localeCompare(a.name));
+  return dirs[0];
+}
+
+// Find most recently modified .log file inside a date directory
+async function findLatestLogFile(dateDirHandle) {
+  const logs = [];
+  for await (const [name, handle] of dateDirHandle.entries()) {
+    if (handle.kind === 'file' && name.toLowerCase().endsWith('.log')) {
+      const file = await handle.getFile();
+      logs.push({ name, handle, mtime: file.lastModified });
+    }
+  }
+  if (!logs.length) return null;
+  logs.sort((a, b) => b.mtime - a.mtime);
+  return logs[0];
+}
+
+// Full scan — returns { dateDir, logHandle, logName } or null
+async function resolveLatestLog(rootHandle) {
+  const dateDir = await findLatestDateDir(rootHandle);
+  if (!dateDir) return null;
+  const log = await findLatestLogFile(dateDir.handle);
+  if (!log) return null;
+  return { dateDir: dateDir.name, logHandle: log.handle, logName: log.name };
+}
+
+// ─── FOLDER SELECTION ─────────────────────────────────────────────────────────
+async function selectLogsFolder() {
+  if (!window.showDirectoryPicker) {
+    alert('Your browser does not support the File System Access API.\nPlease use Google Chrome or Microsoft Edge.');
+    return;
+  }
+  try {
+    const handle = await window.showDirectoryPicker({ mode: 'read' });
+    folderHandle = handle;
+    await saveFolder(handle);
+    await activateFolder(handle, true);
+  } catch (e) {
+    if (e.name !== 'AbortError') logActivity(`Folder selection failed: ${e.message}`, 'error');
+  }
+}
+
+// Called on load when a saved handle exists — prompts for re-permission
+async function resumeFolder() {
+  if (!folderHandle) return;
+  try {
+    const perm = await folderHandle.requestPermission({ mode: 'read' });
+    if (perm === 'granted') {
+      await activateFolder(folderHandle, false);
+    } else {
+      logActivity('Permission denied — please select the folder again.', 'error');
+    }
+  } catch (e) {
+    logActivity(`Resume failed: ${e.message}`, 'error');
+  }
+}
+
+async function changeFolder() {
+  stopWatching();
+  await clearFolder();
+  folderHandle = null;
+  currentLogHandle = null;
+  currentLogName = '';
+  lastOffset = 0;
+  document.getElementById('log-path-display').value = '';
+  document.getElementById('resume-banner').style.display = 'none';
+  document.getElementById('btn-resume').style.display = 'none';
+  document.getElementById('btn-select').textContent = '▶ Select Folder';
+  updateMetaLog('Not selected', 'bad');
+  setStatus('', 'STANDING BY', 'Select your MechaBREAK logs folder to begin monitoring.');
+  logActivity('Folder cleared. Select a new folder to continue.', '');
+}
+
+// Once we have a permitted folder handle, detect log and start watching
+async function activateFolder(handle, isNew) {
+  document.getElementById('log-path-display').value = handle.name;
+  document.getElementById('resume-banner').style.display = 'none';
+  document.getElementById('btn-resume').style.display = 'none';
+  document.getElementById('btn-select').textContent = '↺ Change Folder';
+
+  logActivity(`Folder ${ isNew ? 'selected' : 'restored'}: ${handle.name}`, 'info');
+
+  const result = await resolveLatestLog(handle);
+  if (!result) {
+    setStatus('error', 'NO LOG FOUND', `No date folders or .log files found in <span class="file-path">${handle.name}</span>`);
+    updateMetaLog('No log found', 'bad');
+    logActivity('No YYYY_MM_DD folders or .log files found. Is this the right directory?', 'error');
+    return;
+  }
+
+  currentLogHandle = result.logHandle;
+  currentLogName   = result.logName;
+  const file = await currentLogHandle.getFile();
+  lastOffset = file.size; // seek to end — only new lines from this point
+  updateMetaLog(result.logName, 'good');
+
+  logActivity(`Date folder: ${result.dateDir}`, '');
+  logActivity(`Active log: ${result.logName} (${formatBytes(file.size)}) — tailing from end`, 'success');
+
+  startWatching();
+}
+
+// ─── WATCHING ────────────────────────────────────────────────────────────────
+function startWatching() {
+  if (pollTimer)   clearInterval(pollTimer);
+  if (refreshTimer) clearInterval(refreshTimer);
+  isWatching = true;
+
+  const webhookReady = !!localStorage.getItem('mb-webhook-url');
+  setStatus('active', 'MONITORING',
+    `Log: <span class="file-path">${currentLogName}</span>`);
+  logActivity('Monitoring started.', 'success');
+  if (!webhookReady) logActivity('Discord notifier not configured — in-app alerts only.', 'error');
+
+  document.getElementById('btn-stop').disabled = false;
+
+  pollTimer    = setInterval(pollLogFile, POLL_INTERVAL);
+  refreshTimer = setInterval(checkForNewerLog, REFRESH_INTERVAL);
+}
+
+function stopWatching() {
+  if (pollTimer)    { clearInterval(pollTimer);    pollTimer    = null; }
+  if (refreshTimer) { clearInterval(refreshTimer); refreshTimer = null; }
+  isWatching = false;
+  setStatus('', 'STANDING BY', 'Monitoring stopped.');
+  document.getElementById('btn-stop').disabled = true;
+  logActivity('Monitoring stopped.', '');
+}
+
+// ─── PERIODIC LOG REFRESH (mirrors Python REFRESH_INTERVAL logic) ─────────────
+async function checkForNewerLog() {
+  if (!folderHandle || !isWatching) return;
+  try {
+    const result = await resolveLatestLog(folderHandle);
+    if (!result) return;
+    if (result.logName !== currentLogName) {
+      logActivity(`New log detected: ${result.logName} — switching.`, 'info');
+      currentLogHandle = result.logHandle;
+      currentLogName   = result.logName;
+      const file = await currentLogHandle.getFile();
+      lastOffset = file.size;
+      updateMetaLog(result.logName, 'good');
+      setStatus('active', 'MONITORING',
+        `Log: <span class="file-path">${currentLogName}</span>`);
+    }
+  } catch (e) {
+    // Non-fatal — just skip this refresh cycle
+  }
+}
+
+// ─── CORE POLLING ─────────────────────────────────────────────────────────────
+async function pollLogFile() {
+  if (!currentLogHandle) return;
+  try {
+    const file = await currentLogHandle.getFile();
+    const size = file.size;
+
+    if (size < lastOffset) {
+      // Truncated / rotated
+      lastOffset = 0;
+      logActivity('Log file truncated — resetting read position.', 'info');
+    }
+
+    if (size > lastOffset) {
+      const text = await file.slice(lastOffset, size).text();
+      lastOffset = size;
+      processNewText(text);
+    }
+  } catch (e) {
+    // File temporarily unavailable — skip cycle silently
+  }
+}
+
+// ─── MATCH DETECTION ─────────────────────────────────────────────────────────
+function processNewText(text) {
+  for (const line of text.split(/\r?\n/)) {
+    if (line.includes('UIWarPrepareModule') && line.includes('embattleStageInfo')) {
+      onMatchFound();
+      return;
+    }
+  }
+}
+
+// ─── MATCH FOUND ─────────────────────────────────────────────────────────────
+function onMatchFound() {
+  matchCount++;
+  updateMeta();
+
+  const timeStr = new Date().toLocaleTimeString();
+  logActivity(`⚡ MATCH FOUND at ${timeStr}!`, 'alert');
+  setStatus('match-found', 'MATCH FOUND!',
+    `Queue popped at <strong>${timeStr}</strong> — get back to your desk!`);
+
+  document.getElementById('overlay-time').textContent = timeStr;
+  document.getElementById('match-overlay').classList.add('visible');
+
+  sendBrowserNotification();
+  sendDiscordNotification(null, timeStr);
+
+  setTimeout(() => {
+    if (isWatching) setStatus('active', 'MONITORING',
+      `Log: <span class="file-path">${currentLogName}</span>`);
+  }, 8000);
+}
+
+function dismissOverlay() {
+  document.getElementById('match-overlay').classList.remove('visible');
+}
+
+// ─── WORKER CONFIG (hardcoded) ────────────────────────────────────────────────
+const WORKER_URL  = 'https://mechaq.yue-dbf.workers.dev';
+const SECRET_KEY  = 'soletta-MBQ-!@#';
+
+// ─── SETUP FLOW ───────────────────────────────────────────────────────────────
+async function runSetup() {
+  const userId = document.getElementById('discord-user-id').value.trim();
+
+  if (!userId || !/^\d{17,20}$/.test(userId)) {
+    showSetupStatus('✗ Enter a valid Discord User ID (17–20 digits).', 'error'); return;
+  }
+
+  document.getElementById('btn-setup').disabled = true;
+  showSetupStatus('Contacting server...', '');
+
+  try {
+    const res  = await fetch(`${WORKER_URL}/setup`, {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json', 'X-Secret-Key': SECRET_KEY },
+      body:    JSON.stringify({ userId }),
+    });
+    const data = await res.json();
+
+    if (data.ok) {
+      localStorage.setItem('mb-webhook-url',  data.webhookUrl);
+      localStorage.setItem('mb-channel-name', data.channelName);
+      logActivity(`Channel created: #${data.channelName}`, 'success');
+      showReadyState(data.channelName);
+      updateNotifierMeta(true);
+    } else {
+      showSetupStatus(`✗ ${data.error || 'Setup failed.'}`, 'error');
+      document.getElementById('btn-setup').disabled = false;
+    }
+  } catch (e) {
+    showSetupStatus(`✗ Could not reach Worker: ${e.message}`, 'error');
+    document.getElementById('btn-setup').disabled = false;
+  }
+}
+
+function showSetupStatus(msg, type) {
+  const el = document.getElementById('setup-status');
+  el.style.display = 'block';
+  el.style.borderColor = type === 'error' ? 'var(--red)' : type === 'success' ? 'var(--green)' : 'var(--border)';
+  el.style.color = type === 'error' ? 'var(--red)' : type === 'success' ? 'var(--green)' : 'var(--text-dim)';
+  el.textContent = msg;
+}
+
+function showReadyState(channelName) {
+  document.getElementById('setup-form').style.display     = 'none';
+  document.getElementById('setup-complete').style.display = 'block';
+  document.getElementById('channel-name-display').textContent = `#${channelName}`;
+}
+
+function resetSetup() {
+  localStorage.removeItem('mb-webhook-url');
+  localStorage.removeItem('mb-channel-name');
+  document.getElementById('setup-form').style.display     = 'block';
+  document.getElementById('setup-complete').style.display = 'none';
+  document.getElementById('btn-setup').disabled           = false;
+  document.getElementById('setup-status').style.display   = 'none';
+  updateNotifierMeta(false);
+  logActivity('Setup reset. Re-enter details to create a new channel.', '');
+}
+
+function updateNotifierMeta(ready) {
+  const meta = document.getElementById('meta-webhook');
+  if (ready) { meta.textContent = 'Ready'; meta.className = 'meta-val good'; }
+  else        { meta.textContent = 'Not configured'; meta.className = 'meta-val bad'; }
+}
+
+// ─── DISCORD NOTIFICATION (direct webhook, no Worker) ────────────────────────
+async function sendDiscordNotification(_, timeStr) {
+  const webhookUrl = localStorage.getItem('mb-webhook-url');
+  if (!webhookUrl) {
+    logActivity('No webhook configured — run Setup first.', 'error'); return;
+  }
+  try {
+    const res = await fetch(webhookUrl, {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        username: 'MB Match Notifier',
+        embeds: [{
+          color:       0xff6b20,
+          title:       '⚡  Match Found!',
+          description: 'Your Mecha Break queue has popped.\n**Get back to your desk!**',
+          fields: [
+            { name: 'Time',   value: timeStr,       inline: true },
+            { name: 'Status', value: '🟠 Queue Pop', inline: true },
+          ],
+          footer:    { text: 'MB Match Notifier · by Soletta' },
+          timestamp: new Date().toISOString(),
+        }],
+      }),
+    });
+    if (res.ok || res.status === 204) {
+      logActivity('Discord notification sent.', 'success');
+    } else {
+      logActivity(`Webhook error: HTTP ${res.status}`, 'error');
+    }
+  } catch (e) {
+    logActivity(`Webhook request failed: ${e.message}`, 'error');
+  }
+}
+
+// ─── TEST NOTIFICATION ────────────────────────────────────────────────────────
+async function testNotification() {
+  const webhookUrl = localStorage.getItem('mb-webhook-url');
+  const result     = document.getElementById('webhook-test-result');
+  if (!webhookUrl) {
+    result.className = 'webhook-test-result fail';
+    result.textContent = '✗ No webhook saved — re-run setup.';
+    return;
+  }
+  result.style.display = 'block';
+  result.className = 'webhook-test-result';
+  result.textContent = 'Sending test ping...';
+  try {
+    const res = await fetch(webhookUrl, {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        username: 'MB Match Notifier',
+        embeds: [{
+          color:       0x00d4ff,
+          title:       '✓ Notifier Connected',
+          description: 'Your private channel is set up and ready. You\'ll receive a notification here when your queue pops.',
+          footer:    { text: 'MB Match Notifier · Test Ping' },
+          timestamp: new Date().toISOString(),
+        }],
+      }),
+    });
+    if (res.ok || res.status === 204) {
+      result.className = 'webhook-test-result ok';
+      result.textContent = '✓ Test message sent — check your Discord channel.';
+      logActivity('Test notification sent.', 'success');
+    } else {
+      result.className = 'webhook-test-result fail';
+      result.textContent = `✗ HTTP ${res.status} — try re-running setup.`;
+    }
+  } catch (e) {
+    result.className = 'webhook-test-result fail';
+    result.textContent = `✗ Network error: ${e.message}`;
+  }
+}
+
+// ─── BROWSER NOTIFICATIONS ────────────────────────────────────────────────────
+async function sendBrowserNotification() {
+  if (!('Notification' in window)) return;
+  if (Notification.permission === 'default') await Notification.requestPermission();
+  if (Notification.permission === 'granted') {
+    new Notification('⚡ Match Found!', {
+      body: 'Your Mecha Break queue has popped. Get back to your desk!',
+      requireInteraction: true
+    });
+  }
+}
+
+// ─── USER ID PERSISTENCE ─────────────────────────────────────────────────────
+function saveUserId() {
+  const id = document.getElementById('discord-user-id').value.trim();
+  if (id) localStorage.setItem('mb-discord-user-id', id);
+  else    localStorage.removeItem('mb-discord-user-id');
+}
+
+function loadUserId() {
+  const id = localStorage.getItem('mb-discord-user-id');
+  if (id) document.getElementById('discord-user-id').value = id;
+}
+function onWebhookInput() {} // legacy stub
+
+// ─── ON LOAD — restore saved folder ──────────────────────────────────────────
+window.addEventListener('load', async () => {
+
+  // Must be served over http:// — file:// blocks the File System Access API
+  if (window.location.protocol === 'file:') {
+    logActivity('ERROR: Open via launch.bat — do not double-click the HTML file directly.', 'error');
+    setStatus('error', 'USE LAUNCH.BAT',
+      'This app must run over localhost. Double-click <strong>launch.bat</strong> to open it correctly.');
+    document.getElementById('btn-select').disabled = true;
+    return;
+  }
+
+  if (!window.showDirectoryPicker) {
+    logActivity('This browser does not support the File System Access API. Use Chrome or Edge.', 'error');
+    document.getElementById('btn-select').disabled = true;
+    return;
+  }
+
+  logActivity('File System Access API supported. Ready.', 'success');
+  loadUserId();
+
+  // Restore setup state if already completed
+  const savedChannel = localStorage.getItem('mb-channel-name');
+  if (savedChannel && localStorage.getItem('mb-webhook-url')) {
+    showReadyState(savedChannel);
+    updateNotifierMeta(true);
+    logActivity(`Notifier ready — channel: #${savedChannel}`, 'success');
+  }
+
+  // Try to restore saved folder
+  try {
+    const saved = await loadFolder();
+    if (saved) {
+      folderHandle = saved;
+      const perm = await saved.queryPermission({ mode: 'read' });
+      if (perm === 'granted') {
+        logActivity(`Restoring previous folder: ${saved.name}`, 'info');
+        await activateFolder(saved, false);
+      } else {
+        document.getElementById('log-path-display').value = saved.name;
+        document.getElementById('resume-banner').style.display = 'block';
+        document.getElementById('btn-resume').style.display = 'inline-flex';
+        document.getElementById('btn-select').textContent = '↺ Change Folder';
+        logActivity(`Previous folder remembered: ${saved.name} — click Resume to continue.`, 'info');
+      }
+    }
+  } catch (e) {
+    // IDB read failed — no saved folder, proceed normally
+  }
+});
+</script>
+</body>
+</html>
