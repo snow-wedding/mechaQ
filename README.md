@@ -1,6 +1,7 @@
 # MB Match Notifier — Player Setup Guide
 
 This tool watches your Mecha Break game log and sends you a private Discord notification the moment your queue pops — so you don't miss a match while AFK.
+Short tutorial made by divine: https://www.youtube.com/watch?v=a9Qqsa3IYak
 
 **What you'll need:**
 - `mechabreak_notifier.html` and `launch.bat` (keep them in the same folder)
